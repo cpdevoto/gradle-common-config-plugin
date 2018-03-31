@@ -1,0 +1,80 @@
+buildscript {
+    repositories {
+        maven {
+            url "${shrine_artifactory_contextUrl}" + '/plugins-release'
+            credentials {
+                username = "${shrine_artifactory_user}"
+                password = "${shrine_artifactory_password}"
+            }
+        }
+    }
+}
+
+plugins {
+    id "com.jfrog.artifactory" version "3.1.1"
+}
+
+apply plugin: 'groovy'
+apply plugin: "com.jfrog.artifactory"
+apply plugin: 'maven-publish'
+
+
+group 'com.shrinedev'
+
+def baseVersion = '1'
+def build = System.getenv("BUILD_NUMBER") ? System.getenv("BUILD_NUMBER") : buildNum ?: { ->
+    def user = System.getenv("USER");
+    return "dev-${user}";
+}
+def releaseVersion = releaseNum ?: 0
+project.version = "${baseVersion}.${releaseVersion}.${build}"
+
+
+artifactory {
+    contextUrl = "${shrine_artifactory_contextUrl}"   //The base Artifactory URL if not overridden by the publisher/resolver
+    publish {
+        repository {
+            repoKey = 'shrine-plugins-develop'
+            username = "${shrine_artifactory_user}"
+            password = "${shrine_artifactory_password}"
+        }
+        repository {
+            repoKey = 'shrine-plugins-stable'
+            username = "${shrine_artifactory_user}"
+            password = "${shrine_artifactory_password}"
+        }
+    }
+    resolve {
+        repository {
+            repoKey = 'repo'
+            username = "${shrine_artifactory_user}"
+            password = "${shrine_artifactory_password}"
+        }
+    }
+}
+
+dependencies {
+    compile 'org.codehaus.groovy:groovy-all:2.4.3'
+    compile 'org.jfrog.buildinfo:build-info-extractor-gradle:3.1.1'
+    compile 'com.netflix.nebula:gradle-dependency-lock-plugin:4.1.2'
+    compile gradleApi()
+}
+
+publishing {
+    publications {
+        mavenGroovy(MavenPublication) {
+            from components.java
+            artifact(file("$rootDir/gradle.properties"))
+        }
+    }
+}
+
+artifactoryPublish {
+    publications('mavenGroovy')
+    def stableBuild = releaseNum.isInteger() && (releaseNum != '0');
+    if ( stableBuild ) {
+        clientConfig.publisher.repoKey = 'shrine-plugins-stable'
+    } else {
+        clientConfig.publisher.repoKey = 'shrine-plugins-develop'
+    }
+}
